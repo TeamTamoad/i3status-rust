@@ -270,13 +270,19 @@ pub struct HueshiftConfig {
     pub step: u16,
     pub click_temp: u16,
 }
+impl HueshiftConfig {
+    // limit too big steps at 500K to avoid too brutal changes
+    const MAX_STEP: u16 = 500;
+    const MAX_TEMP: u16 = 10_000;
+    const MIN_TEMP: u16 = 1_000;
+}
 
 impl Default for HueshiftConfig {
     fn default() -> Self {
         Self {
             interval: Duration::from_secs(5),
-            max_temp: 10_000,
-            min_temp: 1_000,
+            max_temp: Self::MAX_TEMP,
+            min_temp: Self::MIN_TEMP,
             current_temp: 6_500,
             hue_shifter: if has_command("redshift").unwrap_or(false) {
                 Some(HueShifter::Redshift)
@@ -309,19 +315,13 @@ impl ConfigBlock for Hueshift {
         update_request: Sender<Task>,
     ) -> Result<Self> {
         let current_temp = block_config.current_temp;
-        let mut step = block_config.step;
-        let mut max_temp = block_config.max_temp;
-        let mut min_temp = block_config.min_temp;
-        // limit too big steps at 500K to avoid too brutal changes
-        if step > 500 {
-            step = 500;
-        }
-        if block_config.max_temp > 10_000 {
-            max_temp = 10_000;
-        }
-        if block_config.min_temp < 1000 || block_config.min_temp > block_config.max_temp {
-            min_temp = 1000;
-        }
+        let step = block_config.step.min(Self::Config::MAX_STEP);
+        let max_temp = block_config
+            .max_temp
+            .clamp(Self::Config::MIN_TEMP, Self::Config::MAX_TEMP);
+        let min_temp = block_config
+            .min_temp
+            .clamp(Self::Config::MIN_TEMP, Self::Config::MAX_TEMP);
 
         let hue_shifter = block_config
             .hue_shifter
